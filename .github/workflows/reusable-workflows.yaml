@@ -1,0 +1,38 @@
+name: Running Matos iac scan
+
+on:
+  workflow_call:
+    inputs:
+      scan_dir:
+        required: true
+        type: string
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Create temp result folder
+      run: |
+        mkdir -p matos-iac-results-dir
+
+    - name: Run docker iac image
+      uses: dungdmatos/docker-custom-run@main
+      with:
+        image: cloudmatos/matos-iac-scan:latest
+        options: -v ${{github.workspace}}:/path
+        command: scan -p /path/${{inputs.scan_dir}} -o /path/matos-iac-results-dir
+
+    - name: display and post kics results
+      if: always()
+      run: |
+        #!/bin/bash
+        GITURL="${{ github.server_url }}/${{ github.repository }}"
+        jq -nc --argfile results "results-dir/results.json" --arg git_url "$GITURL" '{$results,$git_url}' |
+          curl -i \
+          -H "Accept: application/json" \
+          -H "Content-Type:application/json" \
+          -X POST -d @- "https://console.cloudmatos.dev/app/iac-scan/store"
